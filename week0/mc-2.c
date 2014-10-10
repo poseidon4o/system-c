@@ -1,5 +1,5 @@
+// arg print
 #include <stdio.h>
-
 
 int main () {
     char buff[1024];
