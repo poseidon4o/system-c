@@ -8,6 +8,7 @@
 
 
 #define EVENT_SIZE (sizeof(struct inotify_event) + FILENAME_MAX + 1)
+#define BUFF_SIZE 128 * EVENT_SIZE
 
 void poll_for_file(int fd);
 
@@ -44,26 +45,19 @@ void poll_for_file(int fd) {
     char buff[EVENT_SIZE];
 
     for(;;) {
-        int event_size, read_sz = read(fd, buff, EVENT_SIZE);
-        if (read_sz > 0) {
-            struct inotify_event * event = (struct inotify_event*)&buff;
-            
+        int offset = 0, read_sz;
+        read_sz = read(fd, buff, BUFF_SIZE);
+        while(offset < read_sz) {
+            struct inotify_event * event = (struct inotify_event*)(buff + offset);
             if ( !(event->mask & IN_ISDIR) ) {
                 if (event->mask & IN_CREATE) {
                     printf("File created: [%s]\n", event->len ? event->name : "");
                 } else if (event->mask & IN_DELETE) {
                     printf("File deleted: [%s]\n", event->len ? event->name : "");
                 }
-            }
-            event_size = sizeof(struct inotify_event) + event->len;
-
-            // hacky way to repair half read events
-            if (EVENT_SIZE - event_size > 0) {
-                memmove(buff, buff + event_size, EVENT_SIZE - event_size);
-            }
+            } 
+            offset += sizeof(struct inotify_event) + event->len;
         }
-    }
-
-
-
+        
+   }
 }
