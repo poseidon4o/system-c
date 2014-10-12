@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 
+#include "packet_definitions.h"
 #include "matcher.h"
 
 #define perr(val,buff)\
@@ -15,17 +16,38 @@
 char packet_buff[4096];
 
 void packet_handler(u_char * args, const struct pcap_pkthdr * header, const u_char * packet) {
-    int c, r = 0;
-    if (!header->len || header->len > 4096) {
+    int c, r = 0, offset = 0, data_length;
+    struct radiotap_header * rt_header; 
+    struct wireless_header * wireless_header;
+
+    if (!header->len) {
         return;
     }
     
-    for(c = 0; c < header->len; ++c) {
-        if (isprint(packet[c])) {
-            packet_buff[r++] = packet[c];
+    rt_header = (struct radiotap_header *)packet;
+    wireless_header = (struct wireless_header*)(packet + rt_header->it_len);
+    
+    if (
+        !wireless_header->fc.protected_frame && 
+        wireless_header->fc.sub_type == 0 &&
+        wireless_header->fc.type == DATA
+    ) {
+        offset =  rt_header->it_len - sizeof(wireless_header);
+        data_length = header->len - offset;
+        if (data_length > 4096) {
+            return;
         }
+        
+        for(c = 0; c < data_length; ++c) {
+            if(isprint(packet[offset + c])) {
+                packet_buff[r++] = packet[offset + c];
+            } else {
+                packet_buff[r++] = ' ';
+            }
+        }
+        packet_buff[r] = '\0';
     }
-    packet_buff[r] = '\0';
+
     matcher_append(packet_buff);
 }
 
@@ -41,11 +63,6 @@ int main(int argc, char * argv[]) {
     
     if (argc != 3) {
         puts("%s <device> <port>");
-        exit(EXIT_FAILURE);
-    }
-   
-    if(matcher_init(match_cb) == -1) {
-        puts("matcher failed to init");
         exit(EXIT_FAILURE);
     }
 
@@ -64,11 +81,17 @@ int main(int argc, char * argv[]) {
     if (pcap_setfilter(handle, &filter) == -1) {
         perr(0, pcap_geterr(handle));
     }
+    
+    if(matcher_init(match_cb) == -1) {
+        puts("matcher failed to init");
+        exit(EXIT_FAILURE);
+    }
 
     if (pcap_loop(handle, -1, packet_handler, NULL) == -1) {
+        matcher_uninit();
         perr(0, pcap_geterr(handle));
     } 
 
-    puts("wooot");
+    matcher_uninit();
     return 0;
 }
