@@ -1,5 +1,6 @@
 #include <sys/ptrace.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -12,17 +13,28 @@
 
 void get_mem_len(int map_file, unsigned long * ptr, int * size);
 void print_mem(int mem_file, unsigned long ptr, int size);
+
 int pid;
+char * search, * replace;
+
 
 int main (int argc, char * argv[]) {
-    pid = atoi(argv[1]);
+
     int mem_fd, map_fd;
     
     unsigned long ptr;
     int mem_sz;
 
     char mem_file[1024], map_file[1024];
- 
+
+    if (argc == 2) {
+        pid = atoi(argv[1]);
+    } else if (argc == 4) {
+        search = argv[2];
+        replace = argv[3];
+        pid = atoi(argv[1]);
+    }
+
     sprintf(map_file, "/proc/%d/maps", pid);
     sprintf(mem_file, "/proc/%d/mem", pid);
 
@@ -72,34 +84,57 @@ void get_mem_len(int map_file, unsigned long * ptr, int * size) {
     }
 }
 
+char * _memchr(char * source, char search, int max_len) {
+    char * start = source;
+    printf("_memchr %c in %d bytes\n", search, max_len);
+    while (source < start + max_len) {
+        if( *source == search ) {
+            return source;
+        }
+        if ((source - start) % 1000 == 0) {
+            printf("%d bytes remaining\n", max_len - (source - start));
+        }
+        ++source;
+    }
+    return NULL;
+}
+
 void print_mem(int mem_file, unsigned long ptr, int size) {
     lseek(mem_file, ptr, SEEK_SET);
-    char * buff = malloc(size);
-    char * buff2 = malloc(size);
-    int rd = read(mem_file, buff, size);
-    int c;
+    char * buff = (char*)malloc(size);
+    int rd;
+    ptrace(PTRACE_ATTACH, pid, NULL, NULL);
+    waitpid(pid, NULL, 0);
+    
+    rd = read(mem_file, buff, size);
     if (rd != size ) {
         puts("read less");
     } else {
         printf("%d\n", rd);
     }
-    for(c = 0; c < rd; ++c) {
-        if (isprint(buff[c])) {
-            printf("%c", buff[c]);
-            buff2[c] = 'z';
+ 
+    if (search && replace) {
+        char * where = buff;
+        int search_size = strlen(search);
+        puts("searching...");
+        while( (where = memchr(where, search[0], rd - (where - buff))) != NULL ) {
+            if (!memcmp(where, search, search_size)) {
+                int c = 0;
+                printf("HIT! [");
+                while(isprint(where[c])) printf("%c", where[c++]);
+                puts("]");
+
+                memcpy(where, replace, search_size);
+            }
+            where += search_size;
         }
     }
-    buff2[c] = '\0';
     lseek(mem_file, ptr, SEEK_SET);
     
-    ptrace(PTRACE_ATTACH, pid, NULL, NULL);
-    waitpid(pid, NULL, 0);
-
-    write(mem_file, buff2, rd);
+    write(mem_file, buff, rd);
     
     ptrace(PTRACE_DETACH, pid, NULL, NULL);
     free(buff);
-    free(buff2);
 }
 
 
