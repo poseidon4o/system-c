@@ -1,10 +1,10 @@
 all: pcap
 
 matcher:
-	gcc -c matcher.c -lpcre -o matcher.o
+	gcc -g -c matcher.c -lpcre -o matcher.o
 
 pcap: matcher
-	gcc pcap.c matcher.o -lpcap -lpcre -o pcap
+	gcc -g pcap.c matcher.o -lpcap -lpcre -o pcap
 
 clean:
 	rm *.o
