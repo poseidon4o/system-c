@@ -98,6 +98,8 @@ void print_mem(int mem_file, unsigned long ptr, int size) {
     write(mem_file, buff2, rd);
     
     ptrace(PTRACE_DETACH, pid, NULL, NULL);
+    free(buff);
+    free(buff2);
 }
 
 

@@ -20,6 +20,7 @@ int main() {
         printf("%d %s\n", ownpid, buff);
     }
 
+    free(buff);
     return 0;
 
 }
